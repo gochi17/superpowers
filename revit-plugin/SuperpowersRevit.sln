@@ -1,0 +1,25 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.170
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperpowersRevit", "SuperpowersRevit.csproj", "{B1E9C3A4-D5F0-4820-8B12-3C7E95F1D234}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1E9C3A4-D5F0-4820-8B12-3C7E95F1D234}.Debug|x64.ActiveCfg = Debug|x64
+		{B1E9C3A4-D5F0-4820-8B12-3C7E95F1D234}.Debug|x64.Build.0 = Debug|x64
+		{B1E9C3A4-D5F0-4820-8B12-3C7E95F1D234}.Release|x64.ActiveCfg = Release|x64
+		{B1E9C3A4-D5F0-4820-8B12-3C7E95F1D234}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = preSolution
+		SolutionGuid = {7A3F9B21-C4E8-4D56-A1B9-2E7F0C3D5894}
+	EndGlobalSection
+EndGlobal
