@@ -12,42 +12,56 @@ namespace SuperpowersRevit.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            UIDocument? uidoc = commandData.Application.ActiveUIDocument;
+            if (uidoc is null)
+            {
+                message = "No active document.";
+                return Result.Failed;
+            }
+
             Document doc = uidoc.Document;
 
-            var targets = ResolveTargets(uidoc, doc);
+            List<Element> targets = ResolveTargets(uidoc, doc);
 
             if (targets.Count == 0)
             {
                 TaskDialog.Show("No Elements",
-                    "No rooms or generic model families found.\n" +
+                    "No rooms or generic model families were found.\n\n" +
                     "Select rooms / generic model instances before running.");
                 return Result.Cancelled;
             }
 
-            var service = new ThreeDViewService(doc);
             int count = 0;
 
-            using (var t = new Transaction(doc, "Create 3D Views"))
+            try
             {
+                using var t = new Transaction(doc, "Create 3D Views");
                 t.Start();
-                count = service.Create3DViews(targets);
+                count = new ThreeDViewService(doc).Create3DViews(targets);
                 t.Commit();
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
             }
 
             TaskDialog.Show("Done", $"Created {count} 3D view(s).");
             return Result.Succeeded;
         }
 
+        // ── Helpers ──────────────────────────────────────────────────────────
+
         private static List<Element> ResolveTargets(UIDocument uidoc, Document doc)
         {
-            var selected = uidoc.Selection.GetElementIds()
+            List<Element> selection = uidoc.Selection
+                .GetElementIds()
                 .Select(id => doc.GetElement(id))
                 .Where(IsSupported)
                 .ToList();
 
-            if (selected.Count > 0)
-                return selected;
+            if (selection.Count > 0)
+                return selection;
 
             return new FilteredElementCollector(doc)
                 .OfClass(typeof(SpatialElement))

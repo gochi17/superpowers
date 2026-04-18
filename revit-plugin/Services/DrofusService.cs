@@ -7,17 +7,26 @@ using System.Text.Json;
 namespace SuperpowersRevit.Services
 {
     /// <summary>
-    /// Communicates with the Drofus REST API using only built-in .NET 8 types (HttpClient + System.Text.Json).
-    /// Authentication: POST /api/login → bearer token stored for subsequent calls.
+    /// Thin REST client for the Drofus API.
+    /// Uses only built-in .NET 8 types: HttpClient and System.Text.Json.
+    ///
+    /// Authentication flow:
+    ///   POST {host}/api/login  →  receives a Bearer token
+    ///   All subsequent calls attach: Authorization: Bearer {token}
+    ///
+    /// Blocking callers (Revit commands) should call methods via
+    /// .GetAwaiter().GetResult() — ConfigureAwait(false) on every await
+    /// inside this service prevents deadlocks when the calling context
+    /// has a synchronisation context (e.g. WPF dispatcher).
     /// </summary>
-    public class DrofusService : IDisposable
+    public sealed class DrofusService : IDisposable
     {
         private readonly HttpClient _http;
-        private readonly string _username;
-        private readonly string _password;
-        private string _token = string.Empty;
+        private readonly string    _username;
+        private readonly string    _password;
+        private string             _token = string.Empty;
 
-        private static readonly JsonSerializerOptions JsonOpts = new()
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true
         };
@@ -27,23 +36,27 @@ namespace SuperpowersRevit.Services
             _username = username;
             _password = password;
 
-            // Normalise host: strip trailing slash, ensure https
-            host = host.TrimEnd('/');
+            // Normalise host — ensure scheme and strip trailing slash
+            host = host.Trim().TrimEnd('/');
             if (!host.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                host = $"https://{host}";
+                host = "https://" + host;
 
-            _http = new HttpClient { BaseAddress = new Uri(host + "/") };
+            _http = new HttpClient
+            {
+                BaseAddress = new Uri(host + "/"),
+                Timeout     = TimeSpan.FromSeconds(30)
+            };
             _http.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
-        // ── Authentication ──────────────────────────────────────────────────
+        // ── Connection test ──────────────────────────────────────────────────
 
         public async Task<bool> TestConnectionAsync()
         {
             try
             {
-                await AuthenticateAsync();
+                await AuthenticateAsync().ConfigureAwait(false);
                 return !string.IsNullOrEmpty(_token);
             }
             catch
@@ -52,79 +65,93 @@ namespace SuperpowersRevit.Services
             }
         }
 
+        // ── Projects ─────────────────────────────────────────────────────────
+
+        public async Task<List<DrofusProject>> GetProjectsAsync()
+        {
+            await AuthenticateAsync().ConfigureAwait(false);
+            return await GetListAsync<DrofusProject>("api/projects").ConfigureAwait(false);
+        }
+
+        // ── Rooms ────────────────────────────────────────────────────────────
+
+        public async Task<List<DrofusRoom>> GetRoomsAsync(string projectId)
+        {
+            await AuthenticateAsync().ConfigureAwait(false);
+            return await GetListAsync<DrofusRoom>($"api/projects/{projectId}/rooms")
+                             .ConfigureAwait(false);
+        }
+
+        // ── Items ────────────────────────────────────────────────────────────
+
+        public async Task<List<DrofusItem>> GetItemsAsync(string projectId)
+        {
+            await AuthenticateAsync().ConfigureAwait(false);
+            return await GetListAsync<DrofusItem>($"api/projects/{projectId}/items")
+                             .ConfigureAwait(false);
+        }
+
+        public async Task<List<DrofusItem>> GetItemsByRoomAsync(string projectId, string roomId)
+        {
+            await AuthenticateAsync().ConfigureAwait(false);
+            return await GetListAsync<DrofusItem>(
+                             $"api/projects/{projectId}/rooms/{roomId}/items")
+                             .ConfigureAwait(false);
+        }
+
+        // ── Authentication (lazy, cached) ────────────────────────────────────
+
         private async Task AuthenticateAsync()
         {
             if (!string.IsNullOrEmpty(_token))
                 return;
 
-            var payload = JsonSerializer.Serialize(new
+            string payload = JsonSerializer.Serialize(new
             {
                 username = _username,
                 password = _password
             });
 
-            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-            using var response = await _http.PostAsync("api/login", content);
+            using var content  = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await _http.PostAsync("api/login", content)
+                                           .ConfigureAwait(false);
+
             response.EnsureSuccessStatusCode();
 
-            string body = await response.Content.ReadAsStringAsync();
-            var login = JsonSerializer.Deserialize<DrofusLoginResponse>(body, JsonOpts)
-                        ?? throw new InvalidOperationException("Empty login response.");
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            DrofusLoginResponse login =
+                JsonSerializer.Deserialize<DrofusLoginResponse>(body, JsonOptions)
+                ?? throw new InvalidOperationException("Drofus login returned an empty response.");
+
+            if (string.IsNullOrEmpty(login.Token))
+                throw new InvalidOperationException("Drofus login did not return a token.");
 
             _token = login.Token;
             _http.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", _token);
         }
 
-        // ── Projects ────────────────────────────────────────────────────────
-
-        public async Task<List<DrofusProject>> GetProjectsAsync()
-        {
-            await AuthenticateAsync();
-            return await GetListAsync<DrofusProject>("api/projects");
-        }
-
-        // ── Rooms ───────────────────────────────────────────────────────────
-
-        public async Task<List<DrofusRoom>> GetRoomsAsync(string projectId)
-        {
-            await AuthenticateAsync();
-            return await GetListAsync<DrofusRoom>($"api/projects/{projectId}/rooms");
-        }
-
-        // ── Items ───────────────────────────────────────────────────────────
-
-        public async Task<List<DrofusItem>> GetItemsAsync(string projectId)
-        {
-            await AuthenticateAsync();
-            return await GetListAsync<DrofusItem>($"api/projects/{projectId}/items");
-        }
-
-        public async Task<List<DrofusItem>> GetItemsByRoomAsync(string projectId, string roomId)
-        {
-            await AuthenticateAsync();
-            return await GetListAsync<DrofusItem>($"api/projects/{projectId}/rooms/{roomId}/items");
-        }
-
-        // ── Helpers ─────────────────────────────────────────────────────────
+        // ── Generic GET helper ───────────────────────────────────────────────
 
         private async Task<List<T>> GetListAsync<T>(string endpoint)
         {
-            using var response = await _http.GetAsync(endpoint);
+            using var response = await _http.GetAsync(endpoint).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            string body = await response.Content.ReadAsStringAsync();
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            // Try paged response first
+            // Drofus may return either a plain array or a paged wrapper object
             try
             {
-                var paged = JsonSerializer.Deserialize<DrofusPagedResponse<T>>(body, JsonOpts);
-                if (paged?.Data is not null)
+                DrofusPagedResponse<T>? paged =
+                    JsonSerializer.Deserialize<DrofusPagedResponse<T>>(body, JsonOptions);
+                if (paged?.Data is { Count: > 0 })
                     return paged.Data;
             }
-            catch { /* fall through to plain list */ }
+            catch (JsonException) { /* not a paged response — fall through */ }
 
-            return JsonSerializer.Deserialize<List<T>>(body, JsonOpts) ?? [];
+            return JsonSerializer.Deserialize<List<T>>(body, JsonOptions) ?? [];
         }
 
         public void Dispose() => _http.Dispose();

@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace SuperpowersRevit.Models
 {
-    public class DrofusProject
+    // ── Project ───────────────────────────────────────────────────────────────
+
+    public sealed class DrofusProject
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -14,7 +16,9 @@ namespace SuperpowersRevit.Models
         public string Description { get; set; } = string.Empty;
     }
 
-    public class DrofusRoom
+    // ── Room ──────────────────────────────────────────────────────────────────
+
+    public sealed class DrofusRoom
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -34,11 +38,16 @@ namespace SuperpowersRevit.Models
         [JsonPropertyName("level")]
         public string Level { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Arbitrary key-value attributes that may map to shared/project parameters in Revit.
+        /// </summary>
         [JsonPropertyName("attributes")]
         public Dictionary<string, string> Attributes { get; set; } = [];
     }
 
-    public class DrofusItem
+    // ── Item ──────────────────────────────────────────────────────────────────
+
+    public sealed class DrofusItem
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -65,7 +74,9 @@ namespace SuperpowersRevit.Models
         public Dictionary<string, string> Attributes { get; set; } = [];
     }
 
-    public class DrofusLoginResponse
+    // ── Auth response ─────────────────────────────────────────────────────────
+
+    public sealed class DrofusLoginResponse
     {
         [JsonPropertyName("token")]
         public string Token { get; set; } = string.Empty;
@@ -74,7 +85,9 @@ namespace SuperpowersRevit.Models
         public string Expires { get; set; } = string.Empty;
     }
 
-    public class DrofusPagedResponse<T>
+    // ── Paged list wrapper ────────────────────────────────────────────────────
+
+    public sealed class DrofusPagedResponse<T>
     {
         [JsonPropertyName("data")]
         public List<T> Data { get; set; } = [];

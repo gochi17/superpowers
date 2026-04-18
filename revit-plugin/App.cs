@@ -7,55 +7,61 @@ namespace SuperpowersRevit
     {
         public Result OnStartup(UIControlledApplication app)
         {
-            const string tabName = "Superpowers";
+            const string tab = "Superpowers";
 
-            try { app.CreateRibbonTab(tabName); }
-            catch { /* tab already exists */ }
+            try { app.CreateRibbonTab(tab); }
+            catch { /* tab already registered */ }
 
             string dll = Assembly.GetExecutingAssembly().Location;
 
-            RibbonPanel viewPanel = app.CreateRibbonPanel(tabName, "Views");
+            // ── Views panel ─────────────────────────────────────────────────
+            RibbonPanel viewPanel = app.CreateRibbonPanel(tab, "Views");
 
             viewPanel.AddItem(new PushButtonData(
-                "CreatePlanViews",
-                "Plan\nViews",
-                dll,
-                "SuperpowersRevit.Commands.CreatePlanViewsCommand")
+                name:        "CreatePlanViews",
+                text:        "Plan\nViews",
+                assemblyName: dll,
+                className:   "SuperpowersRevit.Commands.CreatePlanViewsCommand")
             {
-                ToolTip = "Create plan views from selected rooms or generic model families.",
+                ToolTip = "Create a cropped floor-plan view for each selected room or generic model family.",
                 LongDescription =
-                    "Select rooms or generic model family instances before running. " +
-                    "If nothing is selected all placed rooms are used. " +
-                    "Each element gets a cropped floor-plan view sized to its bounding box."
+                    "Select rooms or generic model instances before running. " +
+                    "With nothing selected, all placed rooms are processed. " +
+                    "Each element receives a dedicated floor-plan view cropped to its bounding box."
             });
 
             viewPanel.AddItem(new PushButtonData(
-                "CreateElevations",
-                "Elevations",
-                dll,
-                "SuperpowersRevit.Commands.CreateElevationsCommand")
+                name:        "CreateElevations",
+                text:        "Elevations",
+                assemblyName: dll,
+                className:   "SuperpowersRevit.Commands.CreateElevationsCommand")
             {
-                ToolTip = "Generate N/S/E/W interior elevations for selected rooms or families."
+                ToolTip = "Create four interior elevations (N / S / E / W) for each selected room or family.",
+                LongDescription =
+                    "Must be run while a floor-plan view is active. " +
+                    "An ElevationMarker is placed at the centre of each element's bounding box " +
+                    "and four ViewSection elevations are generated."
             });
 
             viewPanel.AddItem(new PushButtonData(
-                "Create3DViews",
-                "3D Views",
-                dll,
-                "SuperpowersRevit.Commands.Create3DViewsCommand")
+                name:        "Create3DViews",
+                text:        "3D Views",
+                assemblyName: dll,
+                className:   "SuperpowersRevit.Commands.Create3DViewsCommand")
             {
-                ToolTip = "Create an isometric 3D view with a section box fitted to each selected element."
+                ToolTip = "Create an isometric 3D view with a fitted section box for each selected element."
             });
 
-            RibbonPanel drofusPanel = app.CreateRibbonPanel(tabName, "Drofus");
+            // ── Drofus panel ─────────────────────────────────────────────────
+            RibbonPanel drofusPanel = app.CreateRibbonPanel(tab, "Drofus");
 
             drofusPanel.AddItem(new PushButtonData(
-                "DrofusData",
-                "Drofus\nData",
-                dll,
-                "SuperpowersRevit.Commands.DrofusDataCommand")
+                name:        "DrofusData",
+                text:        "Drofus\nData",
+                assemblyName: dll,
+                className:   "SuperpowersRevit.Commands.DrofusDataCommand")
             {
-                ToolTip = "Connect to a Drofus account and pull room/item data into the model."
+                ToolTip = "Log in to Drofus, browse project rooms and items, and write data back to the model."
             });
 
             return Result.Succeeded;

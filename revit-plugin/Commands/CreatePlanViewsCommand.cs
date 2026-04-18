@@ -12,44 +12,60 @@ namespace SuperpowersRevit.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            UIDocument uidoc = commandData.Application.ActiveUIDocument;
+            UIDocument? uidoc = commandData.Application.ActiveUIDocument;
+            if (uidoc is null)
+            {
+                message = "No active document.";
+                return Result.Failed;
+            }
+
             Document doc = uidoc.Document;
 
-            var targets = ResolveTargets(uidoc, doc);
+            List<Element> targets = ResolveTargets(uidoc, doc);
 
             if (targets.Count == 0)
             {
                 TaskDialog.Show("No Elements",
-                    "No rooms or generic model families found.\n" +
-                    "Place at least one room or select rooms / generic model instances before running.");
+                    "No rooms or generic model families were found.\n\n" +
+                    "Either select rooms / generic model instances before running, " +
+                    "or ensure at least one room is placed in the model.");
                 return Result.Cancelled;
             }
 
-            var service = new ViewCreationService(doc);
             int count = 0;
 
-            using (var t = new Transaction(doc, "Create Plan Views"))
+            try
             {
+                using var t = new Transaction(doc, "Create Plan Views");
                 t.Start();
-                count = service.CreatePlanViews(targets);
+                count = new ViewCreationService(doc).CreatePlanViews(targets);
                 t.Commit();
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
             }
 
             TaskDialog.Show("Done", $"Created {count} plan view(s).");
             return Result.Succeeded;
         }
 
+        // ── Helpers ──────────────────────────────────────────────────────────
+
         private static List<Element> ResolveTargets(UIDocument uidoc, Document doc)
         {
-            var selected = uidoc.Selection.GetElementIds()
+            // Use current selection if it contains supported elements
+            List<Element> selection = uidoc.Selection
+                .GetElementIds()
                 .Select(id => doc.GetElement(id))
                 .Where(IsSupported)
                 .ToList();
 
-            if (selected.Count > 0)
-                return selected;
+            if (selection.Count > 0)
+                return selection;
 
-            // Fall back to all placed rooms
+            // Fall back to every placed room in the document
             return new FilteredElementCollector(doc)
                 .OfClass(typeof(SpatialElement))
                 .Cast<SpatialElement>()

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Deploy this file alongside SuperpowersRevit.dll to:
+  Place this file and SuperpowersRevit.dll in:
     %APPDATA%\Autodesk\Revit\Addins\2026\
 -->
 <RevitAddIns>
@@ -10,6 +10,6 @@
     <AddInId>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</AddInId>
     <FullClassName>SuperpowersRevit.App</FullClassName>
     <VendorId>SPWR</VendorId>
-    <VendorDescription>Superpowers Revit Plugin — Plan Views, Elevations, 3D Views, Drofus</VendorDescription>
+    <VendorDescription>Superpowers — Plan Views · Elevations · 3D Views · Drofus</VendorDescription>
   </AddIn>
 </RevitAddIns>

@@ -4,24 +4,25 @@ using Autodesk.Revit.DB.Architecture;
 namespace SuperpowersRevit.Services
 {
     /// <summary>
-    /// Places an ElevationMarker at the centroid of each element's bounding box and creates
-    /// four interior elevation views (North, South, East, West — indices 0-3).
-    /// Must be called inside an open Transaction.
-    /// The host plan view must be passed in; Revit requires it when creating elevations.
+    /// Places an ElevationMarker at the centroid of each element's bounding box and generates
+    /// four ViewSection elevations at indices 0-3 (East · North · West · South for an
+    /// unrotated marker in a North-up plan view).
+    /// All public methods must be called inside an open Transaction.
     /// </summary>
     public class ElevationService(Document doc)
     {
-        // Default drawing scale denominator (1 : Scale)
-        private const int DefaultScale = 50;
+        private const int    DefaultScale       = 50;   // 1:50
+        private const double FarClipPaddingFt   = 1.0;  // extra depth beyond opposite wall
 
-        // Depth of the elevation view beyond the opposite wall (feet)
-        private const double FarClipOffsetFt = 0.5;
+        // Marker index → label.
+        // Revit assigns indices clockwise starting from the right (East) for a 0° marker.
+        private static readonly string[] DirectionLabels = ["East", "North", "West", "South"];
 
         public int CreateElevations(IEnumerable<Element> elements, ViewPlan hostPlanView)
         {
-            ViewFamilyType? vft = GetViewFamilyType(ViewFamily.Elevation);
-            if (vft is null)
-                throw new InvalidOperationException("No Elevation view family type found in document.");
+            ViewFamilyType vft = GetViewFamilyType(ViewFamily.Elevation)
+                ?? throw new InvalidOperationException(
+                       "No Elevation view family type found in the document.");
 
             int count = 0;
 
@@ -37,18 +38,11 @@ namespace SuperpowersRevit.Services
 
                 string label = ElementLabel(el);
 
-                // Indices 0-3 correspond to the four cardinal directions as placed by Revit.
-                // The actual compass direction depends on True North rotation; labels here use
-                // the conventional marker indices (Right / Top / Left / Bottom in plan).
-                string[] dirNames = ["East", "North", "West", "South"];
-
                 for (int i = 0; i < 4; i++)
                 {
                     ViewSection elev = marker.CreateElevation(doc, hostPlanView.Id, i);
-                    elev.Name = UniqueViewName($"Elev - {label} - {dirNames[i]}");
-
-                    // Extend far clip to reach the opposite side of the bounding box
-                    SetFarClip(elev, bbox, i);
+                    elev.Name = UniqueViewName($"Elev - {label} - {DirectionLabels[i]}");
+                    AdjustFarClip(elev, bbox, i);
                 }
 
                 count++;
@@ -57,17 +51,24 @@ namespace SuperpowersRevit.Services
             return count;
         }
 
-        private static void SetFarClip(ViewSection elev, BoundingBoxXYZ bbox, int dirIndex)
+        // ── Internals ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Sets the far-clip offset to the width/depth of the bounding box in the
+        /// camera's look direction so the entire room is visible in the elevation.
+        /// </summary>
+        private static void AdjustFarClip(ViewSection view, BoundingBoxXYZ bbox, int dirIndex)
         {
-            // Estimate depth from bounding box extents
+            // Indices 0/2 = East/West: depth measured along X axis
+            // Indices 1/3 = North/South: depth measured along Y axis
             double depth = dirIndex switch
             {
-                0 or 2 => Math.Abs(bbox.Max.X - bbox.Min.X) + FarClipOffsetFt, // East / West
-                _ => Math.Abs(bbox.Max.Y - bbox.Min.Y) + FarClipOffsetFt        // North / South
+                0 or 2 => Math.Abs(bbox.Max.X - bbox.Min.X) + FarClipPaddingFt,
+                _      => Math.Abs(bbox.Max.Y - bbox.Min.Y) + FarClipPaddingFt
             };
 
-            Parameter? farClip = elev.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
-            farClip?.Set(depth);
+            Parameter? far = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
+            far?.Set(depth);
         }
 
         private static XYZ BBoxCenter(BoundingBoxXYZ b) =>
@@ -79,7 +80,7 @@ namespace SuperpowersRevit.Services
             new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewFamilyType))
                 .Cast<ViewFamilyType>()
-                .FirstOrDefault(vft => vft.ViewFamily == family);
+                .FirstOrDefault(v => v.ViewFamily == family);
 
         private static string ElementLabel(Element el) =>
             el is Room room
@@ -88,7 +89,7 @@ namespace SuperpowersRevit.Services
 
         private string UniqueViewName(string baseName)
         {
-            var existing = new FilteredElementCollector(doc)
+            HashSet<string> existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View))
                 .Cast<View>()
                 .Select(v => v.Name)
