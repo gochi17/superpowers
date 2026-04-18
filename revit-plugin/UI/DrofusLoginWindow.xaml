@@ -38,13 +38,11 @@
 
     <StackPanel Margin="24">
 
-        <!-- Header -->
         <TextBlock Text="Drofus — Sign In"
                    FontSize="16"
                    FontWeight="SemiBold"
                    Margin="0,0,0,16"/>
 
-        <!-- Fields -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="90"/>
@@ -56,24 +54,30 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Host -->
+            <!-- Host URL -->
             <Label Grid.Row="0" Grid.Column="0" Content="Host URL"/>
+            <!--
+                PlaceholderText is NOT available in WPF .NET 8 (added in .NET 9).
+                ToolTip is used instead to guide the user.
+            -->
             <TextBox x:Name="HostBox"
                      Grid.Row="0" Grid.Column="1"
-                     PlaceholderText="https://yourcompany.drofus.com"/>
+                     ToolTip="Enter your Drofus host, e.g. https://yourcompany.drofus.com"/>
 
             <!-- Username -->
             <Label Grid.Row="1" Grid.Column="0" Content="Username"/>
             <TextBox x:Name="UsernameBox"
-                     Grid.Row="1" Grid.Column="1"/>
+                     Grid.Row="1" Grid.Column="1"
+                     ToolTip="Your Drofus account username"/>
 
             <!-- Password -->
             <Label Grid.Row="2" Grid.Column="0" Content="Password"/>
             <PasswordBox x:Name="PasswordBox"
-                         Grid.Row="2" Grid.Column="1"/>
+                         Grid.Row="2" Grid.Column="1"
+                         ToolTip="Your Drofus account password"/>
         </Grid>
 
-        <!-- Validation error -->
+        <!-- Validation error message -->
         <TextBlock x:Name="ErrorText"
                    Foreground="Red"
                    FontSize="11"
@@ -81,7 +85,7 @@
                    Margin="0,8,0,0"
                    Visibility="Collapsed"/>
 
-        <!-- Buttons -->
+        <!-- Action buttons -->
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,20,0,0">

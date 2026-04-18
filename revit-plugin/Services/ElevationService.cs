@@ -4,18 +4,19 @@ using Autodesk.Revit.DB.Architecture;
 namespace SuperpowersRevit.Services
 {
     /// <summary>
-    /// Places an ElevationMarker at the centroid of each element's bounding box and generates
-    /// four ViewSection elevations at indices 0-3 (East · North · West · South for an
-    /// unrotated marker in a North-up plan view).
+    /// Places an ElevationMarker at the plan centroid of each element's bounding box
+    /// and generates four ViewSection interior elevations.
+    ///
+    /// Marker index → camera look direction (0° rotation, North-up plan view):
+    ///   0 = East  (+X)   1 = North (+Y)   2 = West  (-X)   3 = South (-Y)
+    ///
     /// All public methods must be called inside an open Transaction.
     /// </summary>
     public class ElevationService(Document doc)
     {
-        private const int    DefaultScale       = 50;   // 1:50
-        private const double FarClipPaddingFt   = 1.0;  // extra depth beyond opposite wall
+        private const int    DefaultScale     = 50;   // 1 : 50
+        private const double FarClipPaddingFt = 1.0;  // extra depth past the far wall
 
-        // Marker index → label.
-        // Revit assigns indices clockwise starting from the right (East) for a 0° marker.
         private static readonly string[] DirectionLabels = ["East", "North", "West", "South"];
 
         public int CreateElevations(IEnumerable<Element> elements, ViewPlan hostPlanView)
@@ -31,10 +32,18 @@ namespace SuperpowersRevit.Services
                 BoundingBoxXYZ? bbox = el.get_BoundingBox(null);
                 if (bbox is null) continue;
 
-                XYZ center = BBoxCenter(bbox);
+                // Place the marker at the plan centroid (XY mid-point) at floor level (Min.Z).
+                // Using Min.Z rather than the 3D centre ensures the marker sits on the floor
+                // plane of the element, which is where Revit expects it relative to the plan
+                // view's cut plane. Using the vertical midpoint can put the marker above the
+                // plan view's cut height, causing Revit to silently skip marker creation.
+                XYZ markerPosition = new(
+                    (bbox.Min.X + bbox.Max.X) / 2.0,
+                    (bbox.Min.Y + bbox.Max.Y) / 2.0,
+                    bbox.Min.Z);
 
                 ElevationMarker marker = ElevationMarker.CreateElevationMarker(
-                    doc, vft.Id, center, DefaultScale);
+                    doc, vft.Id, markerPosition, DefaultScale);
 
                 string label = ElementLabel(el);
 
@@ -51,30 +60,23 @@ namespace SuperpowersRevit.Services
             return count;
         }
 
-        // ── Internals ────────────────────────────────────────────────────────
+        // ── Internals ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Sets the far-clip offset to the width/depth of the bounding box in the
-        /// camera's look direction so the entire room is visible in the elevation.
+        /// Extends the far-clip plane so the full room depth is visible.
+        /// East/West elevations look along X → depth = X extent.
+        /// North/South elevations look along Y → depth = Y extent.
         /// </summary>
         private static void AdjustFarClip(ViewSection view, BoundingBoxXYZ bbox, int dirIndex)
         {
-            // Indices 0/2 = East/West: depth measured along X axis
-            // Indices 1/3 = North/South: depth measured along Y axis
             double depth = dirIndex switch
             {
                 0 or 2 => Math.Abs(bbox.Max.X - bbox.Min.X) + FarClipPaddingFt,
                 _      => Math.Abs(bbox.Max.Y - bbox.Min.Y) + FarClipPaddingFt
             };
 
-            Parameter? far = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
-            far?.Set(depth);
+            view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR)?.Set(depth);
         }
-
-        private static XYZ BBoxCenter(BoundingBoxXYZ b) =>
-            new((b.Min.X + b.Max.X) / 2.0,
-                (b.Min.Y + b.Max.Y) / 2.0,
-                (b.Min.Z + b.Max.Z) / 2.0);
 
         private ViewFamilyType? GetViewFamilyType(ViewFamily family) =>
             new FilteredElementCollector(doc)

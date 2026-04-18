@@ -64,9 +64,8 @@ namespace SuperpowersRevit.Commands
                 return selection;
 
             return new FilteredElementCollector(doc)
-                .OfClass(typeof(SpatialElement))
-                .Cast<SpatialElement>()
-                .OfType<Room>()
+                .OfClass(typeof(Room))
+                .Cast<Room>()
                 .Where(r => r.Area > 0)
                 .Cast<Element>()
                 .ToList();

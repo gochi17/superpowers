@@ -21,7 +21,7 @@ namespace SuperpowersRevit.Commands
 
             Document doc = uidoc.Document;
 
-            // ElevationMarker.CreateElevation requires a plan view as host
+            // ElevationMarker.CreateElevation requires a ViewPlan as its host view.
             if (uidoc.ActiveView is not ViewPlan planView)
             {
                 TaskDialog.Show("Wrong Active View",
@@ -74,9 +74,8 @@ namespace SuperpowersRevit.Commands
                 return selection;
 
             return new FilteredElementCollector(doc)
-                .OfClass(typeof(SpatialElement))
-                .Cast<SpatialElement>()
-                .OfType<Room>()
+                .OfClass(typeof(Room))
+                .Cast<Room>()
                 .Where(r => r.Area > 0)
                 .Cast<Element>()
                 .ToList();

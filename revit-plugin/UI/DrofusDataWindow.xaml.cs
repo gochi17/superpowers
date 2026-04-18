@@ -12,11 +12,10 @@ namespace SuperpowersRevit.UI
 {
     public partial class DrofusDataWindow : Window
     {
-        private readonly DrofusService  _service;
-        private readonly Document       _doc;
+        private readonly DrofusService   _service;
+        private readonly Document        _doc;
         private readonly DrofusViewModel _vm = new();
 
-        // Full lists (unfiltered) — filters are applied over these
         private List<DrofusRoom> _allRooms = [];
         private List<DrofusItem> _allItems = [];
 
@@ -25,10 +24,7 @@ namespace SuperpowersRevit.UI
             _service    = service;
             _doc        = doc;
             DataContext = _vm;
-
             InitializeComponent();
-
-            // Kick off async load after the window is rendered
             Loaded += async (_, _) => await LoadProjectsAsync();
         }
 
@@ -72,11 +68,17 @@ namespace SuperpowersRevit.UI
 
             try
             {
-                // Fetch rooms and items in parallel
-                Task<List<DrofusRoom>> roomsTask  = _service.GetRoomsAsync(projectId);
-                Task<List<DrofusItem>> itemsTask  = _service.GetItemsAsync(projectId);
+                // Start both requests in parallel so they do not block each other.
+                // ContinueWith is avoided here because it can run continuations on a
+                // thread-pool thread, causing a race against the UI thread when assigning
+                // the results. Instead, fire both tasks, await WhenAll for completion,
+                // then read .Result safely — at that point both tasks are already done.
+                Task<List<DrofusRoom>> roomsTask = _service.GetRoomsAsync(projectId);
+                Task<List<DrofusItem>> itemsTask = _service.GetItemsAsync(projectId);
+
                 await Task.WhenAll(roomsTask, itemsTask);
 
+                // Both tasks are guaranteed complete here; .Result does not block.
                 _allRooms = roomsTask.Result;
                 _allItems = itemsTask.Result;
 
@@ -143,13 +145,11 @@ namespace SuperpowersRevit.UI
         {
             if (_allRooms.Count == 0)
             {
-                MessageBox.Show(
-                    "No Drofus rooms are loaded.\nSelect a project first.",
+                MessageBox.Show("No Drofus rooms are loaded. Select a project first.",
                     "No Data", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            // Index Drofus rooms by number for O(1) lookup
             Dictionary<string, DrofusRoom> index = _allRooms.ToDictionary(
                 r => r.Number, r => r,
                 StringComparer.OrdinalIgnoreCase);
@@ -162,30 +162,27 @@ namespace SuperpowersRevit.UI
                 using var t = new Transaction(_doc, "Write Drofus Data to Revit Rooms");
                 t.Start();
 
-                IEnumerable<Room> revitRooms = new FilteredElementCollector(_doc)
-                    .OfClass(typeof(SpatialElement))
-                    .Cast<SpatialElement>()
-                    .OfType<Room>()
-                    .Where(r => r.Area > 0);
-
-                foreach (Room revitRoom in revitRooms)
+                // Use OfClass(typeof(Room)) — concrete class, reliable in all Revit versions.
+                // .Where(Area > 0) excludes unplaced room tags that have no geometry.
+                foreach (Room revitRoom in new FilteredElementCollector(_doc)
+                    .OfClass(typeof(Room))
+                    .Cast<Room>()
+                    .Where(r => r.Area > 0))
                 {
-                    if (!index.TryGetValue(revitRoom.Number, out DrofusRoom? drofusRoom))
+                    if (!index.TryGetValue(revitRoom.Number, out DrofusRoom? dr))
                     {
                         unmatched++;
                         continue;
                     }
 
-                    // Write Drofus function description to the Comments parameter
-                    TrySetStringParam(revitRoom,
+                    TrySetString(revitRoom,
                         BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS,
-                        $"Drofus function: {drofusRoom.Function}");
+                        $"Drofus function: {dr.Function}");
 
-                    // Attempt to map any extra Drofus attributes to identically-named parameters
-                    foreach ((string key, string value) in drofusRoom.Attributes)
+                    foreach ((string key, string value) in dr.Attributes)
                     {
                         Parameter? p = revitRoom.LookupParameter(key);
-                        if (p is not null && !p.IsReadOnly && p.StorageType == StorageType.String)
+                        if (p is { IsReadOnly: false, StorageType: StorageType.String })
                             p.Set(value);
                     }
 
@@ -208,10 +205,10 @@ namespace SuperpowersRevit.UI
 
         // ── Utilities ─────────────────────────────────────────────────────────
 
-        private static void TrySetStringParam(Element el, BuiltInParameter bip, string value)
+        private static void TrySetString(Element el, BuiltInParameter bip, string value)
         {
             Parameter? p = el.get_Parameter(bip);
-            if (p is not null && !p.IsReadOnly && p.StorageType == StorageType.String)
+            if (p is { IsReadOnly: false, StorageType: StorageType.String })
                 p.Set(value);
         }
 

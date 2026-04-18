@@ -24,22 +24,35 @@
         </Style>
 
         <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns"    Value="False"/>
-            <Setter Property="IsReadOnly"             Value="True"/>
-            <Setter Property="CanUserAddRows"         Value="False"/>
-            <Setter Property="SelectionMode"          Value="Single"/>
+            <Setter Property="AutoGenerateColumns"      Value="False"/>
+            <Setter Property="IsReadOnly"               Value="True"/>
+            <Setter Property="CanUserAddRows"           Value="False"/>
+            <Setter Property="SelectionMode"            Value="Single"/>
             <Setter Property="AlternatingRowBackground" Value="#EFF4FF"/>
-            <Setter Property="GridLinesVisibility"    Value="Horizontal"/>
-            <Setter Property="HeadersVisibility"      Value="Column"/>
-            <Setter Property="FontSize"               Value="12"/>
-            <Setter Property="RowHeight"              Value="24"/>
+            <Setter Property="GridLinesVisibility"      Value="Horizontal"/>
+            <Setter Property="HeadersVisibility"        Value="Column"/>
+            <Setter Property="FontSize"                 Value="12"/>
+            <Setter Property="RowHeight"                Value="24"/>
+        </Style>
+
+        <!--
+            WPF .NET 8 TextBox has no PlaceholderText property (added in .NET 9).
+            This style hides the watermark TextBlock when the TextBox has content.
+        -->
+        <Style x:Key="WatermarkTextBlockStyle" TargetType="TextBlock">
+            <Setter Property="Visibility"        Value="Collapsed"/>
+            <Setter Property="IsHitTestVisible"  Value="False"/>
+            <Setter Property="Foreground"        Value="#AAAAAA"/>
+            <Setter Property="FontStyle"         Value="Italic"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin"            Value="7,0,0,0"/>
         </Style>
 
     </Window.Resources>
 
     <DockPanel Margin="10">
 
-        <!-- ── Top toolbar ──────────────────────────────────────────────── -->
+        <!-- ── Top toolbar ─────────────────────────────────────────────────── -->
         <Border DockPanel.Dock="Top"
                 Background="#E8EDF3"
                 CornerRadius="4"
@@ -81,8 +94,9 @@
             </StackPanel>
         </Border>
 
-        <!-- ── Tab control ──────────────────────────────────────────────── -->
-        <TabControl DockPanel.Dock="Bottom">
+        <!-- ── Tab control ─────────────────────────────────────────────────── -->
+        <!-- Last child of DockPanel — fills remaining space via LastChildFill -->
+        <TabControl>
 
             <!-- Rooms tab -->
             <TabItem Header="Rooms">
@@ -91,15 +105,37 @@
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"
                                 Margin="0,4,0,6">
-                        <TextBox x:Name="RoomSearchBox"
-                                 Width="240"
-                                 PlaceholderText="Filter rooms…"
-                                 TextChanged="RoomSearch_TextChanged"/>
+
+                        <!--
+                            PlaceholderText is NOT available in WPF .NET 8.
+                            Implemented here via a transparent TextBlock overlay inside a Grid.
+                            The watermark TextBlock is visible only when the TextBox is empty.
+                        -->
+                        <Grid Width="240">
+                            <TextBox x:Name="RoomSearchBox"
+                                     TextChanged="RoomSearch_TextChanged"/>
+                            <TextBlock Text="Filter by number, name or function…"
+                                       Style="{StaticResource WatermarkTextBlockStyle}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource WatermarkTextBlockStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=RoomSearchBox}"
+                                                         Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
                         <TextBlock x:Name="RoomCountText"
                                    VerticalAlignment="Center"
                                    Margin="10,0,0,0"
-                                   Foreground="#666"
+                                   Foreground="#666666"
                                    FontSize="11"/>
+
                     </StackPanel>
 
                     <DataGrid x:Name="RoomsGrid" ItemsSource="{Binding Rooms}">
@@ -132,15 +168,32 @@
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"
                                 Margin="0,4,0,6">
-                        <TextBox x:Name="ItemSearchBox"
-                                 Width="240"
-                                 PlaceholderText="Filter items…"
-                                 TextChanged="ItemSearch_TextChanged"/>
+
+                        <Grid Width="240">
+                            <TextBox x:Name="ItemSearchBox"
+                                     TextChanged="ItemSearch_TextChanged"/>
+                            <TextBlock Text="Filter by number, name or category…"
+                                       Style="{StaticResource WatermarkTextBlockStyle}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource WatermarkTextBlockStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=ItemSearchBox}"
+                                                         Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
                         <TextBlock x:Name="ItemCountText"
                                    VerticalAlignment="Center"
                                    Margin="10,0,0,0"
-                                   Foreground="#666"
+                                   Foreground="#666666"
                                    FontSize="11"/>
+
                     </StackPanel>
 
                     <DataGrid x:Name="ItemsGrid" ItemsSource="{Binding Items}">

@@ -55,7 +55,6 @@ namespace SuperpowersRevit.Commands
 
         private static List<Element> ResolveTargets(UIDocument uidoc, Document doc)
         {
-            // Use current selection if it contains supported elements
             List<Element> selection = uidoc.Selection
                 .GetElementIds()
                 .Select(id => doc.GetElement(id))
@@ -65,11 +64,12 @@ namespace SuperpowersRevit.Commands
             if (selection.Count > 0)
                 return selection;
 
-            // Fall back to every placed room in the document
+            // Fall back to all placed rooms.
+            // OfClass(typeof(Room)) uses the concrete Room class — reliable in all Revit versions.
+            // Area > 0 filters out unplaced room tags that carry no geometry.
             return new FilteredElementCollector(doc)
-                .OfClass(typeof(SpatialElement))
-                .Cast<SpatialElement>()
-                .OfType<Room>()
+                .OfClass(typeof(Room))
+                .Cast<Room>()
                 .Where(r => r.Area > 0)
                 .Cast<Element>()
                 .ToList();
