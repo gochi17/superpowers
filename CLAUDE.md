@@ -1,4 +1,201 @@
-# Superpowers — Contributor Guidelines
+# Superpowers — Codebase Guide & Contributor Guidelines
+
+## Codebase Overview
+
+Superpowers is a zero-dependency, multi-platform skills plugin for AI coding assistants. It ships a library of general-purpose skills (structured workflows injected as context) and a session-start hook that bootstraps agent sessions across Claude Code, Cursor, OpenCode, Codex, and Gemini CLI.
+
+**Current version:** 5.0.7 (tracked in `package.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `gemini-extension.json`)
+
+---
+
+## Repository Structure
+
+```
+superpowers/
+├── skills/                  # Core skills library (16 skills)
+│   └── <skill-name>/
+│       ├── SKILL.md         # Skill definition (frontmatter + content)
+│       └── ...              # Supporting references, scripts, examples
+├── agents/                  # Subagent role definitions
+│   └── code-reviewer.md
+├── commands/                # Deprecated slash commands (redirect to skills)
+├── hooks/                   # Session lifecycle hooks
+│   ├── session-start        # Injects using-superpowers skill at startup
+│   ├── hooks.json           # Claude Code hook matchers
+│   └── hooks-cursor.json    # Cursor hook matchers
+├── tests/                   # Automated test suite
+│   ├── claude-code/         # Claude Code CLI integration tests
+│   ├── brainstorm-server/   # WebSocket server unit tests
+│   ├── explicit-skill-requests/
+│   ├── skill-triggering/
+│   ├── subagent-driven-dev/ # End-to-end with real projects
+│   └── opencode/
+├── docs/                    # Design specs, implementation plans, guides
+│   ├── superpowers/specs/   # YYYY-MM-DD-topic-design.md
+│   ├── superpowers/plans/   # YYYY-MM-DD-topic.md
+│   ├── windows/             # Windows-specific hook guidance
+│   └── testing.md
+├── scripts/
+│   ├── bump-version.sh      # Synchronize version across all plugin manifests
+│   └── sync-to-codex-plugin.sh
+├── .claude-plugin/          # Claude Code plugin manifest + marketplace config
+├── .cursor-plugin/          # Cursor IDE plugin manifest
+├── .codex/                  # OpenAI Codex integration (symlink-based)
+├── .opencode/               # OpenCode.ai plugin
+├── .version-bump.json       # Defines which files to synchronize on version bump
+├── gemini-extension.json    # Gemini CLI extension metadata
+├── package.json
+├── README.md                # User-facing installation and usage guide
+└── CLAUDE.md                # This file
+```
+
+---
+
+## Skills System
+
+### What a Skill Is
+
+A skill is a Markdown file (`SKILL.md`) with YAML frontmatter. When a user invokes a skill, the AI assistant loads the full file content as additional context and follows its instructions. Skills are not prose — they are behavior-shaping code.
+
+### Skill File Format
+
+```markdown
+---
+name: skill-name-with-hyphens
+description: Use when [triggering conditions]. [What the skill enables — third-person, ≤500 chars, no workflow summary]
+---
+
+[Overview — 1-2 sentence core principle]
+
+[When to Use — with decision criteria]
+
+[The Process — typically a Graphviz DOT flowchart]
+
+[Checklist or step-by-step breakdown]
+
+[Key Principles]
+
+[Red Flags / Common Mistakes — anti-pattern tables]
+```
+
+### Skill Description Rules (Critical)
+
+The `description` field is read by the AI to decide whether to load the skill. It MUST:
+- State WHEN to use the skill (triggering conditions), not WHAT it does step-by-step
+- Be written in third person
+- Be ≤500 characters
+- NOT summarize the workflow (agents follow the description instead of reading the full content if it describes the workflow)
+
+### Skills Inventory
+
+| Skill | Purpose |
+|---|---|
+| `brainstorming` | Socratic design refinement — requires spec approval before implementation |
+| `writing-plans` | Create task breakdowns (2-5 min tasks, complete code, no placeholders) |
+| `writing-skills` | Develop new skills using TDD methodology with adversarial testing |
+| `test-driven-development` | RED-GREEN-REFACTOR cycle with mandatory watch-it-fail-first |
+| `systematic-debugging` | 4-phase root-cause investigation |
+| `verification-before-completion` | Confirm fixes actually work before declaring done |
+| `subagent-driven-development` | Dispatch fresh subagent per task with two-stage review |
+| `executing-plans` | Batch execution with human checkpoints |
+| `using-git-worktrees` | Isolated workspace creation for parallel work |
+| `requesting-code-review` | Dispatch code-reviewer subagent with precise context |
+| `receiving-code-review` | Technical evaluation before implementing review feedback |
+| `dispatching-parallel-agents` | Concurrent subagent workflows |
+| `finishing-a-development-branch` | Merge/PR decision workflow after task completion |
+| `using-superpowers` | Introduction to skills system — injected by session-start hook |
+
+### Invocation Priority
+
+1. User's explicit instructions (highest)
+2. Superpowers skills
+3. Default system prompt (lowest)
+
+---
+
+## Session-Start Hook
+
+`hooks/session-start` is a shell script that runs at session start. It:
+
+1. Detects the harness (Claude Code vs. Cursor vs. Copilot CLI)
+2. Outputs the `using-superpowers` skill content in the appropriate JSON format
+3. Warns if a legacy `~/.config/superpowers/skills` directory exists
+
+Output format varies by platform:
+- **Cursor:** `additional_context` (snake_case)
+- **Claude Code:** `hookSpecificOutput.additionalContext` (nested)
+- **Copilot CLI:** `additionalContext` (top-level SDK standard)
+
+---
+
+## Multi-Platform Plugin Architecture
+
+Each platform has its own manifest that references shared skill files:
+
+| Platform | Manifest | Hook config |
+|---|---|---|
+| Claude Code | `.claude-plugin/plugin.json` | `hooks/hooks.json` |
+| Cursor | `.cursor-plugin/plugin.json` | `hooks/hooks-cursor.json` |
+| OpenCode | `.opencode/plugins/superpowers.js` | Auto-discovery |
+| Codex | `.codex/INSTALL.md` | Symlink-based |
+| Gemini CLI | `gemini-extension.json` | — |
+
+---
+
+## Development Workflows
+
+### Adding or Modifying a Skill
+
+1. Use the `superpowers:writing-skills` skill — it applies TDD to documentation
+2. Run adversarial pressure testing across multiple sessions
+3. Record before/after eval results
+4. Do not modify Red Flags tables, rationalization lists, or "human partner" language without eval evidence
+
+### Bumping the Version
+
+```bash
+bash scripts/bump-version.sh <new-version>
+```
+
+This synchronizes `package.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `gemini-extension.json`.
+
+### Syncing to Codex
+
+```bash
+bash scripts/sync-to-codex-plugin.sh
+```
+
+### Running Tests
+
+```bash
+# Claude Code integration tests
+cd tests/claude-code
+bash run-skill-tests.sh
+
+# With flags
+bash run-skill-tests.sh --integration   # full end-to-end (10-30 min)
+bash run-skill-tests.sh --verbose
+bash run-skill-tests.sh --timeout 600
+```
+
+### Writing New Tests
+
+Test files live in `tests/claude-code/`. Use `test-helpers.sh` for assertion functions. Integration tests should cover the full skill loading and workflow ordering.
+
+---
+
+## Key Conventions
+
+- **Zero dependencies:** No third-party runtime dependencies. If a change needs an external tool, it belongs in a separate plugin.
+- **"human partner" not "the user":** This phrasing is deliberate — it shapes agent behavior toward collaborative accountability.
+- **Mandatory language:** Skills use "MUST", "Do NOT", "STOP" — non-negotiable phrasing is intentional.
+- **Graphviz DOT for flowcharts:** All process diagrams use DOT notation (see `skills/writing-skills/graphviz-conventions.dot`).
+- **Spec files:** Design documents live in `docs/superpowers/specs/` as `YYYY-MM-DD-topic-design.md`.
+- **One problem per PR:** Never bundle unrelated changes.
+
+---
+
+# Contributor Guidelines
 
 ## If You Are an AI Agent
 
