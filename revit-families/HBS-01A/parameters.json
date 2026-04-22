@@ -1,0 +1,118 @@
+{
+  "family_name": "HBS-01A",
+  "description": "Accessible wall-hung washbasin — sanitary set HBS-01A",
+  "category": "Plumbing Fixtures",
+  "hosting": "Wall",
+  "template": "Metric Plumbing Fixture wall based.rft",
+  "parameters": [
+    {
+      "name": "Width",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 460,
+      "instance": false,
+      "note": "Overall counter/basin width"
+    },
+    {
+      "name": "Depth",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 520,
+      "instance": false,
+      "note": "Projection from wall face to front edge"
+    },
+    {
+      "name": "Height",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 840,
+      "instance": true,
+      "note": "FFL to counter top surface (840 max per drawing)"
+    },
+    {
+      "name": "Rim_Thickness",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 150,
+      "instance": false,
+      "note": "Thickness of the counter slab"
+    },
+    {
+      "name": "Basin_Width",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 435,
+      "instance": false,
+      "note": "Inner bowl width (centred in counter)"
+    },
+    {
+      "name": "Basin_Depth_Bowl",
+      "group": "Dimensions",
+      "type": "Length",
+      "default_mm": 80,
+      "instance": false,
+      "note": "Depth of the bowl below counter surface"
+    },
+    {
+      "name": "Knee_Clearance",
+      "group": "Constraints",
+      "type": "Length",
+      "default_mm": 680,
+      "instance": false,
+      "note": "Minimum knee clearance height (680 min per drawing)"
+    },
+    {
+      "name": "Toe_Space_Height",
+      "group": "Constraints",
+      "type": "Length",
+      "default_mm": 230,
+      "instance": false,
+      "note": "Minimum toe space height (230 min per drawing)"
+    },
+    {
+      "name": "Toe_Space_Depth",
+      "group": "Constraints",
+      "type": "Length",
+      "default_mm": 230,
+      "instance": false,
+      "note": "Minimum toe space depth (230 min per drawing)"
+    }
+  ],
+  "types": [
+    {
+      "name": "HBS-01A Standard",
+      "Width": 460,
+      "Depth": 520,
+      "Height": 840,
+      "Rim_Thickness": 150,
+      "Basin_Width": 435,
+      "Basin_Depth_Bowl": 80,
+      "Knee_Clearance": 680,
+      "Toe_Space_Height": 230,
+      "Toe_Space_Depth": 230
+    },
+    {
+      "name": "HBS-01A Compact",
+      "Width": 460,
+      "Depth": 460,
+      "Height": 840,
+      "Rim_Thickness": 120,
+      "Basin_Width": 400,
+      "Basin_Depth_Bowl": 80,
+      "Knee_Clearance": 680,
+      "Toe_Space_Height": 230,
+      "Toe_Space_Depth": 200
+    }
+  ],
+  "source_drawing": "SANITARY SET HBS-01A",
+  "notes": [
+    "Height of operable parts (soap dispensers, hand dryers, etc.) to be positioned 900-1200mm from floor.",
+    "Mirror (MR1): 460mm wide x 770mm tall.",
+    "Soap dispenser (SD1*): positioned at 400mm above counter (~1240 FFL).",
+    "Paper dispenser (PD1*): same zone as SD1.",
+    "Tap (T1): 25mm offset from basin centreline.",
+    "Grab rail (R2) at top and bottom of accessible zone.",
+    "Leg guard (LG1) required under basin.",
+    "Bottle trap (B1) and floor grate (G1) centred under basin."
+  ]
+}
