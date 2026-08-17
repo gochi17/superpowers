@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Validation Checker | Roombok</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; }
+
+        /* ---- Header ---- */
+        .header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+            color: white;
+            padding: 18px 32px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+        }
+        .header-inner { max-width: 1500px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+        .header .subtitle { font-size: 12px; opacity: 0.75; margin-top: 3px; }
+        .header-meta { text-align: right; font-size: 12px; opacity: 0.75; }
+        .header-meta strong { display: block; font-size: 14px; opacity: 1; }
+
+        /* ---- Workflow Steps ---- */
+        .steps-bar {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 0 32px;
+        }
+        .steps-inner { max-width: 1500px; margin: 0 auto; display: flex; }
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 20px 14px 0;
+            position: relative;
+            flex: 1;
+            cursor: default;
+        }
+        .step-item:not(:last-child)::after {
+            content: '›';
+            position: absolute;
+            right: 4px;
+            color: #ccc;
+            font-size: 18px;
+        }
+        .step-num {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: #e8ecef;
+            color: #aaa;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .step-label { font-size: 12px; color: #aaa; white-space: nowrap; }
+        .step-item.active .step-num { background: #2196F3; color: white; }
+        .step-item.active .step-label { color: #2196F3; font-weight: 600; }
+        .step-item.done .step-num { background: #4CAF50; color: white; }
+        .step-item.done .step-label { color: #4CAF50; }
+
+        /* ---- Layout ---- */
+        .container { max-width: 1500px; margin: 0 auto; padding: 24px 32px; }
+        .main-grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; align-items: start; }
+
+        /* ---- Panels ---- */
+        .panel { background: white; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); overflow: hidden; }
+        .panel + .panel { margin-top: 20px; }
+        .panel-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid #eef0f3;
+            font-weight: 700;
+            font-size: 13px;
+            color: #1e3a5f;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fafbfc;
+        }
+        .panel-header .badge-count {
+            margin-left: auto;
+            background: #2196F3;
+            color: white;
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+        }
+        .panel-body { padding: 18px; }
+
+        /* ---- Upload Zones ---- */
+        .upload-zone {
+            border: 2px dashed #c8d0d8;
+            border-radius: 8px;
+            padding: 22px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafbfc;
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: #2196F3;
+            background: #e8f4fd;
+        }
+        .upload-zone .uz-icon { font-size: 28px; margin-bottom: 6px; }
+        .upload-zone .uz-title { font-size: 13px; font-weight: 600; color: #444; }
+        .upload-zone .uz-hint { font-size: 11px; color: #999; margin-top: 3px; }
+
+        /* ---- File Items ---- */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 11px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-top: 7px;
+            border: 1px solid #eaecef;
+        }
+        .fi-icon { font-size: 18px; flex-shrink: 0; }
+        .fi-info { flex: 1; min-width: 0; }
+        .fi-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fi-size { font-size: 10px; color: #aaa; }
+        .fi-status { font-size: 11px; flex-shrink: 0; }
+        .fi-status.loading { color: #ff9800; }
+        .fi-status.ready { color: #4CAF50; }
+        .fi-status.error { color: #f44336; }
+        .fi-type select {
+            font-size: 11px;
+            padding: 2px 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            background: white;
+            color: #444;
+            max-width: 130px;
+        }
+        .btn-remove {
+            background: none; border: none;
+            color: #ccc; cursor: pointer;
+            font-size: 15px; padding: 2px 4px;
+            flex-shrink: 0;
+        }
+        .btn-remove:hover { color: #f44336; }
+
+        /* ---- Buttons ---- */
+        .btn {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 9px 18px;
+            border-radius: 6px; border: none; cursor: pointer;
+            font-size: 13px; font-weight: 600;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary { background: #2196F3; color: white; }
+        .btn-primary:not(:disabled):hover { background: #1976D2; }
+        .btn-success { background: #43A047; color: white; }
+        .btn-success:not(:disabled):hover { background: #2E7D32; }
+        .btn-outline { background: white; color: #2196F3; border: 1.5px solid #2196F3; }
+        .btn-outline:hover { background: #e3f2fd; }
+        .btn-danger { background: #e53935; color: white; }
+        .btn-sm { padding: 6px 13px; font-size: 12px; }
+        .btn-full { width: 100%; justify-content: center; }
+
+        /* ---- Summary Cards ---- */
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+        .s-card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+            text-align: center;
+            border-top: 3px solid #e0e0e0;
+        }
+        .s-card.c-total { border-top-color: #2196F3; }
+        .s-card.c-pass  { border-top-color: #43A047; }
+        .s-card.c-fail  { border-top-color: #e53935; }
+        .s-card.c-warn  { border-top-color: #FF8F00; }
+        .s-num { font-size: 38px; font-weight: 700; line-height: 1; }
+        .c-total .s-num { color: #2196F3; }
+        .c-pass  .s-num { color: #43A047; }
+        .c-fail  .s-num { color: #e53935; }
+        .c-warn  .s-num { color: #FF8F00; }
+        .s-label { font-size: 12px; color: #777; margin-top: 5px; }
+
+        /* ---- Tabs ---- */
+        .tabs { display: flex; border-bottom: 2px solid #eaeef2; margin-bottom: 18px; }
+        .tab-btn {
+            padding: 10px 16px;
+            border: none; background: none; cursor: pointer;
+            font-size: 13px; color: #888;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.15s;
+        }
+        .tab-btn.active { color: #2196F3; border-bottom-color: #2196F3; font-weight: 600; }
+        .tab-btn:hover:not(.active) { color: #444; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ---- Status Badges ---- */
+        .badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .badge-PASS    { background: #E8F5E9; color: #2E7D32; }
+        .badge-FAIL    { background: #FFEBEE; color: #C62828; }
+        .badge-WARNING { background: #FFF8E1; color: #E65100; }
+        .badge-INFO    { background: #E3F2FD; color: #1565C0; }
+
+        /* ---- Room Accordion ---- */
+        .room-card { margin-bottom: 7px; border: 1px solid #eaecef; border-radius: 8px; overflow: hidden; }
+        .room-card-head {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 14px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: background 0.15s;
+            user-select: none;
+        }
+        .room-card-head:hover { background: #f0f4f8; }
+        .rc-no { font-weight: 700; font-size: 13px; color: #1e3a5f; min-width: 55px; }
+        .rc-name { flex: 1; font-size: 13px; }
+        .rc-level { font-size: 11px; color: #aaa; min-width: 60px; }
+        .rc-counts { font-size: 11px; display: flex; gap: 8px; }
+        .rc-arrow { font-size: 11px; color: #bbb; transition: transform 0.2s; }
+        .room-card-head.open .rc-arrow { transform: rotate(90deg); }
+        .room-card-body { display: none; border-top: 1px solid #eaecef; }
+        .room-card-body.open { display: block; }
+
+        /* ---- Check Table ---- */
+        .check-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .check-table th {
+            padding: 8px 10px; background: #f5f7f9;
+            text-align: left; font-size: 11px; color: #666;
+            border-bottom: 1px solid #eaecef;
+        }
+        .check-table td { padding: 8px 10px; border-bottom: 1px solid #f4f4f4; vertical-align: top; }
+        .check-table tr:last-child td { border-bottom: none; }
+        .check-table tr:hover td { background: #fafafa; }
+        code.token {
+            background: #f0f4f8; padding: 1px 5px;
+            border-radius: 3px; font-size: 11px; font-family: monospace;
+        }
+
+        /* ---- Issues List ---- */
+        .issue-row {
+            display: flex; gap: 12px;
+            padding: 11px 14px;
+            border-bottom: 1px solid #f4f4f4;
+            align-items: flex-start;
+        }
+        .issue-row:last-child { border-bottom: none; }
+        .ir-icon { font-size: 15px; flex-shrink: 0; padding-top: 1px; }
+        .ir-body { flex: 1; min-width: 0; }
+        .ir-title { font-size: 13px; font-weight: 600; }
+        .ir-detail { font-size: 11px; color: #888; margin-top: 2px; }
+        .ir-room { font-size: 11px; color: #1976D2; font-weight: 600; margin-top: 3px; }
+        .ir-sev { font-size: 10px; font-weight: 700; flex-shrink: 0; padding-top: 3px; }
+        .sev-CRITICAL { color: #C62828; }
+        .sev-HIGH     { color: #E65100; }
+        .sev-MEDIUM   { color: #F57C00; }
+        .sev-LOW      { color: #9E9E9E; }
+
+        /* ---- Search / Filter Bar ---- */
+        .filter-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+        .filter-bar input, .filter-bar select {
+            padding: 7px 11px;
+            border: 1px solid #ddd; border-radius: 6px;
+            font-size: 12px; color: #333;
+        }
+        .filter-bar input { flex: 1; }
+
+        /* ---- Matrix Table ---- */
+        .matrix-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+        .matrix-table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+        .matrix-table th {
+            padding: 7px 9px; background: #f5f7f9;
+            border: 1px solid #e8ecef; font-size: 10px; color: #555;
+            position: sticky; top: 0; z-index: 1;
+        }
+        .matrix-table th:first-child, .matrix-table th:nth-child(2) { left: 0; z-index: 2; background: #eef1f4; }
+        .matrix-table td { padding: 6px 9px; border: 1px solid #f0f0f0; text-align: center; }
+        .matrix-table td:first-child, .matrix-table td:nth-child(2) { text-align: left; }
+
+        /* ---- Comments ---- */
+        .comment-row { margin-bottom: 14px; }
+        .comment-label { font-size: 12px; font-weight: 600; color: #1e3a5f; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+        .comment-box {
+            width: 100%; padding: 8px 10px;
+            border: 1px solid #ddd; border-radius: 5px;
+            font-size: 12px; resize: vertical; min-height: 56px;
+            font-family: inherit;
+        }
+        .comment-box:focus { outline: none; border-color: #2196F3; }
+
+        /* ---- Empty State ---- */
+        .empty-state { text-align: center; padding: 52px 24px; color: #bbb; }
+        .empty-state .es-icon { font-size: 52px; margin-bottom: 12px; }
+        .empty-state p { font-size: 14px; line-height: 1.6; }
+
+        /* ---- Alerts ---- */
+        .alert { padding: 11px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 14px; display: flex; gap: 8px; }
+        .alert-info    { background: #E3F2FD; color: #1565C0; border-left: 3px solid #2196F3; }
+        .alert-success { background: #E8F5E9; color: #2E7D32; border-left: 3px solid #4CAF50; }
+        .alert-warning { background: #FFF8E1; color: #E65100; border-left: 3px solid #FF8F00; }
+
+        /* ---- Loading Overlay ---- */
+        .loading-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 9999;
+            justify-content: center; align-items: center;
+        }
+        .loading-overlay.show { display: flex; }
+        .loading-box {
+            background: white; border-radius: 12px;
+            padding: 36px 52px; text-align: center;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.2);
+            min-width: 260px;
+        }
+        .spinner {
+            width: 44px; height: 44px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #2196F3;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-title { font-size: 14px; font-weight: 700; color: #222; }
+        .loading-sub   { font-size: 12px; color: #888; margin-top: 4px; }
+
+        /* ---- Misc Utilities ---- */
+        .mt-12 { margin-top: 12px; }
+        .mt-16 { margin-top: 16px; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-8 { gap: 8px; }
+
+        .lib-summary { font-size: 11px; color: #888; margin-top: 8px; }
+
+        .progress-hint {
+            font-size: 11px; color: #888; text-align: center;
+            margin-top: 10px; line-height: 1.5;
+        }
+
+        @media (max-width: 1100px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .summary-row { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-box">
+        <div class="spinner"></div>
+        <div class="loading-title" id="loadingTitle">Processing...</div>
+        <div class="loading-sub" id="loadingSub">Please wait</div>
+    </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+    <div class="header-inner">
+        <div>
+            <h1>&#128210; Drawing Validation Checker</h1>
+            <div class="subtitle">Roombok Reference Library &mdash; Cross-check output drawings against reference documents</div>
+        </div>
+        <div class="header-meta">
+            <strong id="hProjectName">No Project</strong>
+            <span id="hDate"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Step Bar -->
+<div class="steps-bar">
+    <div class="steps-inner">
+        <div class="step-item active" id="stp1"><div class="step-num">1</div><div class="step-label">Load Library</div></div>
+        <div class="step-item" id="stp2"><div class="step-num">2</div><div class="step-label">Upload Drawing</div></div>
+        <div class="step-item" id="stp3"><div class="step-num">3</div><div class="step-label">Run Validation</div></div>
+        <div class="step-item" id="stp4"><div class="step-num">4</div><div class="step-label">Review Results</div></div>
+        <div class="step-item" id="stp5"><div class="step-num">5</div><div class="step-label">Export Report</div></div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="main-grid">
+
+        <!-- ====== LEFT COLUMN ====== -->
+        <div>
+
+            <!-- Project Name -->
+            <div class="panel">
+                <div class="panel-header">&#128196; Project</div>
+                <div class="panel-body">
+                    <input type="text" id="projectInput" placeholder="Enter project name..."
+                        style="width:100%;padding:8px 11px;border:1px solid #ddd;border-radius:5px;font-size:13px;"
+                        oninput="onProjectName(this.value)">
+                </div>
+            </div>
+
+            <!-- Reference Library -->
+            <div class="panel">
+                <div class="panel-header">
+                    &#128218; Roombok Reference Library
+                    <span class="badge-count" id="libCount" style="display:none;">0</span>
+                </div>
+                <div class="panel-body">
+                    <p style="font-size:12px;color:#888;margin-bottom:12px;">
+                        Upload tender drawings, construction drawings, room schedules, and finishing schedules.
+                    </p>
+
+                    <div class="upload-zone" id="libZone" onclick="document.getElementById('libInput').click()">
+                        <div class="uz-icon">&#128196;</div>
+                        <div class="uz-title">Drop reference documents here</div>
+                        <div class="uz-hint">PDF, Excel (.xlsx / .xls) &mdash; multiple files OK</div>
+                    </div>
+                    <input type="file" id="libInput" multiple accept=".pdf,.xlsx,.xls" style="display:none">
+
+                    <div id="libList"></div>
+                    <div class="lib-summary" id="libSummary"></div>
+                </div>
+            </div>
+
+            <!-- Output Drawing -->
+            <div class="panel">
+                <div class="panel-header">&#127891; Output Drawing to Validate</div>
+                <div class="panel-body">
+                    <p style="font-size:12px;color:#888;margin-bottom:12px;">
+                        Upload the Revit-exported drawing (PDF or Excel) to validate against the library.
+                    </p>
+
+                    <div class="upload-zone" id="dwgZone" onclick="document.getElementById('dwgInput').click()">
+                        <div class="uz-icon">&#128207;</div>
+                        <div class="uz-title">Drop output drawing here</div>
+                        <div class="uz-hint">PDF or Excel format</div>
+                    </div>
+                    <input type="file" id="dwgInput" accept=".pdf,.xlsx,.xls" style="display:none">
+
+                    <div id="dwgInfo"></div>
+
+                    <div class="mt-16">
+                        <button class="btn btn-primary btn-full" id="runBtn" disabled onclick="runValidation()">
+                            &#9654;&#65038; Run Validation
+                        </button>
+                        <div class="progress-hint" id="readyHint" style="display:none;">
+                            &#10003; Ready &mdash; click Run Validation to start
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ====== RIGHT COLUMN ====== -->
+        <div>
+
+            <!-- Summary Cards (hidden until validated) -->
+            <div class="summary-row" id="summaryRow" style="display:none;">
+                <div class="s-card c-total"><div class="s-num" id="sTotal">0</div><div class="s-label">Total Rooms</div></div>
+                <div class="s-card c-pass"> <div class="s-num" id="sPass">0</div> <div class="s-label">Passed</div></div>
+                <div class="s-card c-fail"> <div class="s-num" id="sFail">0</div> <div class="s-label">Failed</div></div>
+                <div class="s-card c-warn"> <div class="s-num" id="sWarn">0</div> <div class="s-label">Warnings</div></div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="panel">
+                <div class="panel-body">
+
+                    <!-- Empty state -->
+                    <div class="empty-state" id="emptyState">
+                        <div class="es-icon">&#128270;</div>
+                        <p>
+                            Load your <strong>Roombok reference library</strong>, upload the<br>
+                            <strong>output drawing</strong>, then click <strong>Run Validation</strong>.
+                        </p>
+                    </div>
+
+                    <!-- Results (shown after validation) -->
+                    <div id="resultsArea" style="display:none;">
+
+                        <div class="flex justify-between items-center" style="margin-bottom:16px;">
+                            <div>
+                                <div style="font-size:16px;font-weight:700;color:#1e3a5f;">Validation Results</div>
+                                <div style="font-size:11px;color:#aaa;margin-top:2px;" id="validationMeta"></div>
+                            </div>
+                            <div class="flex gap-8">
+                                <button class="btn btn-outline btn-sm" onclick="exportCSV()">&#128190; CSV</button>
+                                <button class="btn btn-success btn-sm" onclick="exportPDF()">&#128196; Export PDF</button>
+                            </div>
+                        </div>
+
+                        <!-- Tabs -->
+                        <div class="tabs">
+                            <button class="tab-btn active" onclick="showTab('rooms', this)">&#127968; By Room</button>
+                            <button class="tab-btn" onclick="showTab('issues', this)">&#9888;&#65038; Issues</button>
+                            <button class="tab-btn" onclick="showTab('matrix', this)">&#9635; Matrix</button>
+                            <button class="tab-btn" onclick="showTab('comments', this)">&#128172; Comments</button>
+                        </div>
+
+                        <!-- Tab: By Room -->
+                        <div class="tab-pane active" id="tab-rooms">
+                            <div class="filter-bar">
+                                <input type="text" placeholder="Search room..." oninput="filterRooms(this.value)" id="roomSearch">
+                                <select onchange="filterRoomsByStatus(this.value)">
+                                    <option value="">All Status</option>
+                                    <option value="PASS">Pass</option>
+                                    <option value="FAIL">Fail</option>
+                                    <option value="WARNING">Warning</option>
+                                </select>
+                            </div>
+                            <div id="roomList"></div>
+                        </div>
+
+                        <!-- Tab: Issues -->
+                        <div class="tab-pane" id="tab-issues">
+                            <div class="filter-bar">
+                                <input type="text" placeholder="Search issues..." oninput="filterIssues(this.value)">
+                                <select onchange="filterIssuesBySev(this.value)">
+                                    <option value="">All Severity</option>
+                                    <option value="CRITICAL">Critical</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="LOW">Low</option>
+                                </select>
+                            </div>
+                            <div id="issueList"></div>
+                        </div>
+
+                        <!-- Tab: Matrix -->
+                        <div class="tab-pane" id="tab-matrix">
+                            <div class="matrix-wrap">
+                                <table class="matrix-table" id="matrixTable">
+                                    <thead id="matrixHead"></thead>
+                                    <tbody id="matrixBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Tab: Comments -->
+                        <div class="tab-pane" id="tab-comments">
+                            <div class="alert alert-info">
+                                &#8505;&#65038; Add review comments per room. They will appear in the exported PDF report.
+                            </div>
+                            <div id="commentList"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+// PDF.js worker
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// App State
+const S = {
+    library: [],
+    drawing: null,
+    results: [],
+    flatChecks: [],
+    roomSchedule: [],
+    comments: {},
+};
+
+// Init
+document.getElementById('hDate').textContent = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+
+function onProjectName(v) {
+    document.getElementById('hProjectName').textContent = v || 'No Project';
+}
+
+// Drop Zones
+function wire(zoneId, handler) {
+    const z = document.getElementById(zoneId);
+    z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('drag-over'); });
+    z.addEventListener('dragleave', () => z.classList.remove('drag-over'));
+    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drag-over'); handler(e.dataTransfer.files); });
+}
+wire('libZone', files => addLibraryFiles(files));
+wire('dwgZone', files => { if (files[0]) setDrawing(files[0]); });
+
+document.getElementById('libInput').addEventListener('change', e => addLibraryFiles(e.target.files));
+document.getElementById('dwgInput').addEventListener('change', e => { if (e.target.files[0]) setDrawing(e.target.files[0]); });
+
+// File helpers
+function fileIcon(name) {
+    if (/\.pdf$/i.test(name)) return '&#128196;';
+    if (/\.xlsx?$/i.test(name)) return '&#128202;';
+    return '&#128196;';
+}
+
+function guessType(name) {
+    const n = name.toLowerCase();
+    if (n.includes('tender'))  return 'tender';
+    if (n.includes('const') || n.includes('cd ') || n.includes('construction')) return 'construction';
+    if (n.includes('room') || n.includes('schedule') || n.includes('sched') || n.includes('space')) return 'schedule';
+    if (n.includes('finish') || n.includes('material') || n.includes('ff&e')) return 'finishing';
+    return 'other';
+}
+
+function fmt(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes/1024).toFixed(0) + ' KB';
+    return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// Text Extraction
+async function extractFile(file) {
+    if (/\.pdf$/i.test(file.name)) return { text: await extractPDF(file), data: null };
+    if (/\.xlsx?$/i.test(file.name)) return extractExcel(file);
+    return { text: '', data: null };
+}
+
+async function extractPDF(file) {
+    if (typeof pdfjsLib === 'undefined') return '[PDF.js not loaded]';
+    try {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        let out = '';
+        for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const content = await page.getTextContent();
+            out += content.items.map(i => i.str).join(' ') + '\n';
+        }
+        return out;
+    } catch(e) {
+        return `[PDF error: ${e.message}]`;
+    }
+}
+
+async function extractExcel(file) {
+    if (typeof XLSX === 'undefined') return { text: '', data: null };
+    try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        let text = '';
+        const sheets = [];
+        wb.SheetNames.forEach(sn => {
+            const ws = wb.Sheets[sn];
+            const csv  = XLSX.utils.sheet_to_csv(ws);
+            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+            text += `[Sheet: ${sn}]\n${csv}\n\n`;
+            sheets.push({ name: sn, rows });
+        });
+        return { text, data: sheets };
+    } catch(e) {
+        return { text: `[Excel error: ${e.message}]`, data: null };
+    }
+}
+
+// Library management
+async function addLibraryFiles(fileList) {
+    for (const file of fileList) {
+        if (S.library.find(d => d.name === file.name)) continue;
+        const doc = { id: Date.now() + Math.random(), name: file.name, file, type: guessType(file.name), status: 'loading', text: '', data: null };
+        S.library.push(doc);
+        renderLibrary();
+
+        const result = await extractFile(file);
+        doc.text   = result.text;
+        doc.data   = result.data;
+        doc.status = 'ready';
+
+        if (doc.type === 'schedule' && doc.data) tryParseSchedule(doc.data);
+        renderLibrary();
+        checkReady();
+    }
+    stepDone(1); stepActive(2);
+}
+
+function changeLibType(id, val) {
+    const doc = S.library.find(d => String(d.id) === String(id));
+    if (!doc) return;
+    doc.type = val;
+    if (val === 'schedule' && doc.data) tryParseSchedule(doc.data);
+}
+
+function removeLibDoc(id) {
+    S.library = S.library.filter(d => String(d.id) !== String(id));
+    renderLibrary();
+    checkReady();
+}
+
+function renderLibrary() {
+    const cnt = document.getElementById('libCount');
+    cnt.textContent = S.library.length;
+    cnt.style.display = S.library.length ? 'inline' : 'none';
+
+    document.getElementById('libList').innerHTML = S.library.map(doc => `
+        <div class="file-item">
+            <div class="fi-icon">${fileIcon(doc.name)}</div>
+            <div class="fi-info">
+                <div class="fi-name" title="${doc.name}">${doc.name}</div>
+                <div class="fi-size">${fmt(doc.file.size)}</div>
+                <div class="fi-type">
+                    <select onchange="changeLibType('${doc.id}', this.value)">
+                        <option value="tender"       ${doc.type==='tender'       ?'selected':''}>Tender Drawing</option>
+                        <option value="construction" ${doc.type==='construction' ?'selected':''}>Construction Drawing</option>
+                        <option value="schedule"     ${doc.type==='schedule'     ?'selected':''}>Room Schedule (Excel)</option>
+                        <option value="finishing"    ${doc.type==='finishing'    ?'selected':''}>Finishing Schedule</option>
+                        <option value="other"        ${doc.type==='other'        ?'selected':''}>Other Reference</option>
+                    </select>
+                </div>
+            </div>
+            <div class="fi-status ${doc.status}">
+                ${doc.status==='loading' ? '&#8987; Parsing...' : doc.status==='ready' ? '&#10003; Ready' : '&#10007; Error'}
+            </div>
+            <button class="btn-remove" onclick="removeLibDoc('${doc.id}')">&#215;</button>
+        </div>`).join('');
+
+    renderLibSummary();
+}
+
+function renderLibSummary() {
+    const counts = {};
+    S.library.forEach(d => { counts[d.type] = (counts[d.type]||0)+1; });
+    const parts = Object.entries(counts).map(([k,v]) => `${v} ${k.replace('schedule','room schedule')}`);
+    const roomCount = S.roomSchedule.length;
+    document.getElementById('libSummary').textContent =
+        S.library.length
+            ? `${S.library.length} document(s): ${parts.join(', ')}${roomCount ? ` · ${roomCount} rooms detected` : ''}`
+            : '';
+}
+
+// Room Schedule Parser
+function tryParseSchedule(sheets) {
+    if (!sheets || !sheets.length) return;
+    let best = null, bestScore = -1;
+    for (const sh of sheets) {
+        if (!sh.rows || !sh.rows.length) continue;
+        const keys = Object.keys(sh.rows[0] || {}).map(k => k.toLowerCase());
+        let score = sh.rows.length;
+        if (keys.some(k => /room|space|unit|zone/.test(k))) score += 100;
+        if (keys.some(k => /no|num|id/.test(k)))            score += 50;
+        if (score > bestScore) { bestScore = score; best = sh; }
+    }
+    if (!best) return;
+    S.roomSchedule = best.rows.filter(r => Object.values(r).some(v => v !== ''));
+    renderLibSummary();
+}
+
+// Output Drawing
+async function setDrawing(file) {
+    S.drawing = { name: file.name, file, status: 'loading', text: '', data: null };
+    renderDrawingInfo();
+    const result = await extractFile(file);
+    S.drawing.text   = result.text;
+    S.drawing.data   = result.data;
+    S.drawing.status = 'ready';
+    if (result.data) tryParseSchedule(result.data);
+    renderDrawingInfo();
+    checkReady();
+    stepDone(2); stepActive(3);
+}
+
+function renderDrawingInfo() {
+    const d = S.drawing;
+    document.getElementById('dwgInfo').innerHTML = d ? `
+        <div class="file-item">
+            <div class="fi-icon">${fileIcon(d.name)}</div>
+            <div class="fi-info">
+                <div class="fi-name">${d.name}</div>
+                <div class="fi-size">${fmt(d.file.size)}</div>
+            </div>
+            <div class="fi-status ${d.status}">
+                ${d.status==='loading' ? '&#8987; Parsing...' : '&#10003; Ready'}
+            </div>
+        </div>` : '';
+}
+
+function checkReady() {
+    const libReady = S.library.some(d => d.status === 'ready');
+    const dwgReady = S.drawing && S.drawing.status === 'ready';
+    const ok = libReady && dwgReady;
+    document.getElementById('runBtn').disabled = !ok;
+    document.getElementById('readyHint').style.display = ok ? 'block' : 'none';
+}
+
+// Step Indicator
+function stepDone(n)   { const el = document.getElementById('stp'+n); if(el){ el.classList.remove('active'); el.classList.add('done'); } }
+function stepActive(n) { for(let i=1;i<=5;i++){ const el=document.getElementById('stp'+i); if(el&&!el.classList.contains('done')) el.classList.remove('active'); } const el=document.getElementById('stp'+n); if(el&&!el.classList.contains('done')) el.classList.add('active'); }
+
+// VALIDATION ENGINE
+async function runValidation() {
+    showLoading('Running validation…', 'Extracting and cross-checking documents');
+    await tick();
+    S.results   = [];
+    S.flatChecks = [];
+    const libText = S.library.filter(d => d.status==='ready').map(d => d.text).join('\n');
+    const dwgText = S.drawing?.text || '';
+    const dwgLow  = dwgText.toLowerCase();
+    if (S.roomSchedule.length > 0) {
+        validateBySchedule(dwgText, dwgLow, libText);
+    } else {
+        validateGeneral(dwgText, dwgLow, libText);
+    }
+    hideLoading();
+    renderResults();
+    stepDone(3); stepDone(4); stepActive(5);
+}
+
+function findCol(keys, candidates) {
+    for (const c of candidates) {
+        const found = keys.find(k => k.toLowerCase().includes(c.toLowerCase()));
+        if (found) return found;
+    }
+    return null;
+}
+
+function colSeverity(col) {
+    const c = col.toLowerCase();
+    if (/room.?no|unit.?no|tag|ref/.test(c))               return 'CRITICAL';
+    if (/provision|m.?e|mech|elec|plumb|fire|hvac/.test(c)) return 'HIGH';
+    if (/finish|floor|wall|ceiling|paint/.test(c))          return 'MEDIUM';
+    return 'LOW';
+}
+
+function validateBySchedule(dwgText, dwgLow, libText) {
+    const sample = S.roomSchedule[0] || {};
+    const cols   = Object.keys(sample);
+    const roomNoCol   = findCol(cols, ['room no','room_no','roomno','unit no','space no','no.','no ','id','room id']);
+    const roomNameCol = findCol(cols, ['room name','room_name','space name','name','description','space','zone name']);
+    const levelCol    = findCol(cols, ['level','floor','storey','zone','block']);
+    const excludeCols = new Set([roomNoCol, roomNameCol, levelCol].filter(Boolean));
+    const provCols    = cols.filter(c => !excludeCols.has(c) && c.trim());
+
+    for (const row of S.roomSchedule) {
+        const roomNo   = roomNoCol   ? String(row[roomNoCol]   || '').trim() : '';
+        const roomName = roomNameCol ? String(row[roomNameCol] || '').trim() : '';
+        const level    = levelCol    ? String(row[levelCol]    || '').trim() : '';
+        if (!roomNo && !roomName) continue;
+
+        const room = { roomNo: roomNo||'—', roomName: roomName||'—', level, checks: [], status: 'PASS' };
+
+        if (roomNo) {
+            const found = textHas(dwgText, dwgLow, roomNo);
+            room.checks.push({ cat:'Room Tag', desc:`Room tag "${roomNo}" in output drawing`, req:roomNo, status:found?'PASS':'FAIL', sev:'CRITICAL' });
+        }
+        if (roomName) {
+            const found = textHas(dwgText, dwgLow, roomName);
+            room.checks.push({ cat:'Room Name', desc:`Room label "${roomName}"`, req:roomName, status:found?'PASS':'WARNING', sev:'MEDIUM' });
+        }
+        if (roomNo) {
+            const foundInLib = textHas(libText, libText.toLowerCase(), roomNo);
+            room.checks.push({ cat:'Library Ref', desc:`Room "${roomNo}" referenced in library docs`, req:roomNo, status:foundInLib?'PASS':'WARNING', sev:'MEDIUM' });
+        }
+
+        for (const col of provCols) {
+            const raw = String(row[col] || '').trim();
+            if (!raw || /^(n\/a|nil|none|no|-)$/i.test(raw) || raw === '0') continue;
+            const items = raw.split(/[,;\/\n]+/).map(s => s.trim()).filter(s => s.length > 1);
+            for (const item of items) {
+                const found = textHas(dwgText, dwgLow, item);
+                const foundInLib = textHas(libText, libText.toLowerCase(), item);
+                room.checks.push({
+                    cat: col, desc: `${col}: "${item}"`, req: item,
+                    status: found ? 'PASS' : (foundInLib ? 'WARNING' : 'FAIL'),
+                    sev: colSeverity(col),
+                    note: found ? '' : (foundInLib ? 'In library but not in drawing' : 'Not found in any document')
+                });
+            }
+        }
+
+        const crits = room.checks.filter(c => c.status==='FAIL' && c.sev==='CRITICAL').length;
+        const fails = room.checks.filter(c => c.status==='FAIL').length;
+        const warns = room.checks.filter(c => c.status==='WARNING').length;
+        room.status = crits > 0 || fails > 2 ? 'FAIL' : (fails > 0 || warns > 0 ? 'WARNING' : 'PASS');
+        S.results.push(room);
+        S.flatChecks.push(...room.checks.map(c => ({...c, roomNo: room.roomNo, roomName: room.roomName})));
+    }
+}
+
+function validateGeneral(dwgText, dwgLow, libText) {
+    const tokens = [...new Set((libText.match(/\b[A-Z0-9][A-Z0-9\-_]{1,20}\b/g)||[]))].slice(0,120);
+    const room = { roomNo:'GEN', roomName:'General Validation', level:'—', checks:[], status:'PASS' };
+    if (tokens.length === 0) {
+        room.checks.push({ cat:'Info', desc:'No reference content extracted. Upload an Excel room schedule for room-level checks.', req:'', status:'INFO', sev:'LOW' });
+    } else {
+        for (const tok of tokens) {
+            const found = textHas(dwgText, dwgLow, tok);
+            room.checks.push({ cat:'Token Match', desc:`Reference item "${tok}"`, req:tok, status:found?'PASS':'WARNING', sev:'LOW' });
+        }
+    }
+    const fails = room.checks.filter(c => c.status==='FAIL'||c.status==='WARNING').length;
+    room.status = fails > tokens.length * 0.4 ? 'WARNING' : 'PASS';
+    S.results.push(room);
+    S.flatChecks.push(...room.checks.map(c => ({...c, roomNo:'GEN', roomName:'General Validation'})));
+}
+
+function textHas(text, textLow, value) {
+    if (!value || !text) return false;
+    const v = value.trim();
+    if (v.length < 2) return false;
+    if (text.includes(v)) return true;
+    if (textLow.includes(v.toLowerCase())) return true;
+    const clean = v.replace(/[\s\-_]+/g,'').toLowerCase();
+    if (clean.length > 2 && textLow.replace(/[\s\-_]+/g,'').includes(clean)) return true;
+    return false;
+}
+
+// RENDER RESULTS
+function renderResults() {
+    document.getElementById('emptyState').style.display  = 'none';
+    document.getElementById('resultsArea').style.display = 'block';
+    document.getElementById('summaryRow').style.display  = 'grid';
+    const total = S.results.length;
+    const pass  = S.results.filter(r => r.status==='PASS').length;
+    const fail  = S.results.filter(r => r.status==='FAIL').length;
+    const warn  = S.results.filter(r => r.status==='WARNING').length;
+    document.getElementById('sTotal').textContent = total;
+    document.getElementById('sPass').textContent  = pass;
+    document.getElementById('sFail').textContent  = fail;
+    document.getElementById('sWarn').textContent  = warn;
+    const proj = document.getElementById('projectInput').value || 'Untitled';
+    document.getElementById('validationMeta').textContent =
+        `${proj} · ${S.drawing?.name || ''} · ${new Date().toLocaleString('en-GB')}`;
+    buildRooms(); buildIssues(); buildMatrix(); buildComments();
+}
+
+function buildRooms() {
+    document.getElementById('roomList').innerHTML = S.results.map(room => {
+        const pass = room.checks.filter(c=>c.status==='PASS').length;
+        const fail = room.checks.filter(c=>c.status==='FAIL').length;
+        const warn = room.checks.filter(c=>c.status==='WARNING').length;
+        const id   = 'rc-' + room.roomNo.replace(/\W/g,'_');
+        const rows = room.checks.map(c => `
+            <tr>
+                <td style="color:#888;font-size:11px;">${c.cat}</td>
+                <td>${c.desc}</td>
+                <td>${c.req ? `<code class="token">${c.req}</code>` : '—'}</td>
+                <td><span class="badge badge-${c.status}">${c.status}</span></td>
+                <td class="sev-${c.sev}" style="font-size:11px;font-weight:600;">${c.sev}</td>
+                <td style="font-size:11px;color:#999;">${c.note||''}</td>
+            </tr>`).join('');
+        return `
+        <div class="room-card" data-no="${room.roomNo.toLowerCase()}" data-name="${room.roomName.toLowerCase()}" data-status="${room.status}">
+            <div class="room-card-head" onclick="toggleRoom('${id}', this)">
+                <div class="rc-no">${room.roomNo}</div>
+                <div class="rc-name">${room.roomName}</div>
+                <div class="rc-level">${room.level}</div>
+                <div class="rc-counts">
+                    <span style="color:#43A047;">${pass}&#10003;</span>
+                    ${fail ? `<span style="color:#e53935;">${fail}&#10007;</span>` : ''}
+                    ${warn ? `<span style="color:#FF8F00;">${warn}&#9888;</span>` : ''}
+                </div>
+                <span class="badge badge-${room.status}" style="margin-left:6px;">${room.status}</span>
+                <span class="rc-arrow" style="margin-left:8px;">&#9658;</span>
+            </div>
+            <div class="room-card-body" id="${id}">
+                <table class="check-table">
+                    <thead><tr>
+                        <th>Category</th><th>Check Description</th>
+                        <th>Required Item</th><th>Status</th><th>Severity</th><th>Note</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+    }).join('') || '<div class="empty-state"><div class="es-icon">&#10003;</div><p>No rooms to display.</p></div>';
+}
+
+function toggleRoom(id, head) {
+    head.classList.toggle('open');
+    const body = document.getElementById(id);
+    if (body) body.classList.toggle('open');
+}
+
+function filterRooms(q) {
+    const ql = (q||'').toLowerCase();
+    document.querySelectorAll('.room-card').forEach(el => {
+        const no   = el.dataset.no || '';
+        const name = el.dataset.name || '';
+        el.style.display = (!ql || no.includes(ql) || name.includes(ql)) ? 'block' : 'none';
+    });
+}
+
+function filterRoomsByStatus(s) {
+    document.querySelectorAll('.room-card').forEach(el => {
+        el.style.display = (!s || el.dataset.status===s) ? 'block' : 'none';
+    });
+    document.getElementById('roomSearch').value = '';
+}
+
+function buildIssues() {
+    const issues = S.flatChecks.filter(c => c.status !== 'PASS' && c.status !== 'INFO');
+    const sevOrd = { CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3 };
+    issues.sort((a,b) => (sevOrd[a.sev]||3) - (sevOrd[b.sev]||3));
+    document.getElementById('issueList').innerHTML = issues.length
+        ? issues.map(i => `
+            <div class="issue-row" data-text="${i.desc.toLowerCase()} ${i.roomNo.toLowerCase()} ${i.roomName.toLowerCase()}" data-sev="${i.sev}">
+                <div class="ir-icon">${i.status==='FAIL'?'&#10060;':'&#9888;&#65038;'}</div>
+                <div class="ir-body">
+                    <div class="ir-title">${i.desc}</div>
+                    ${i.req ? `<div class="ir-detail">Expected: <code class="token">${i.req}</code>${i.note ? ' — '+i.note : ''}</div>` : ''}
+                    <div class="ir-room">${i.roomNo} &mdash; ${i.roomName}</div>
+                </div>
+                <div class="ir-sev sev-${i.sev}">${i.sev}</div>
+            </div>`).join('')
+        : '<div class="empty-state"><div class="es-icon">&#127881;</div><p><strong>No issues found!</strong><br>All checks passed.</p></div>';
+}
+
+function filterIssues(q) {
+    const ql = (q||'').toLowerCase();
+    document.querySelectorAll('.issue-row').forEach(el => {
+        el.style.display = (!ql || (el.dataset.text||'').includes(ql)) ? 'flex' : 'none';
+    });
+}
+
+function filterIssuesBySev(s) {
+    document.querySelectorAll('.issue-row').forEach(el => {
+        el.style.display = (!s || el.dataset.sev===s) ? 'flex' : 'none';
+    });
+}
+
+function buildMatrix() {
+    const cats = [...new Set(S.flatChecks.map(c=>c.cat))];
+    document.getElementById('matrixHead').innerHTML = `<tr>
+        <th>Room No.</th><th>Room Name</th>
+        ${cats.map(c=>`<th>${c}</th>`).join('')}
+        <th>Overall</th>
+    </tr>`;
+    document.getElementById('matrixBody').innerHTML = S.results.map(room => {
+        const catSt = {};
+        cats.forEach(cat => {
+            const chk = room.checks.filter(c=>c.cat===cat);
+            if (!chk.length) { catSt[cat]='NA'; return; }
+            catSt[cat] = chk.some(c=>c.status==='FAIL') ? 'FAIL'
+                       : chk.some(c=>c.status==='WARNING') ? 'WARNING' : 'PASS';
+        });
+        return `<tr>
+            <td><strong>${room.roomNo}</strong></td>
+            <td>${room.roomName}</td>
+            ${cats.map(c => catSt[c]==='NA'
+                ? `<td style="color:#ddd;text-align:center;">—</td>`
+                : `<td><span class="badge badge-${catSt[c]}">${catSt[c]}</span></td>`
+            ).join('')}
+            <td><span class="badge badge-${room.status}">${room.status}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+function buildComments() {
+    document.getElementById('commentList').innerHTML = S.results.map(room => `
+        <div class="comment-row">
+            <div class="comment-label">
+                ${room.roomNo} &mdash; ${room.roomName}
+                <span class="badge badge-${room.status}">${room.status}</span>
+            </div>
+            <textarea class="comment-box"
+                placeholder="Reviewer comments for this room..."
+                oninput="S.comments['${room.roomNo}'] = this.value">${S.comments[room.roomNo]||''}</textarea>
+        </div>`).join('');
+}
+
+function showTab(id, btn) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-'+id).classList.add('active');
+    btn.classList.add('active');
+}
+
+function exportCSV() {
+    if (!S.flatChecks.length) return;
+    const headers = ['Room No','Room Name','Category','Description','Required','Status','Severity','Note'];
+    const rows = S.flatChecks.map(c => [
+        c.roomNo, c.roomName, c.cat,
+        `"${c.desc.replace(/"/g,'""')}"`,
+        `"${(c.req||'').replace(/"/g,'""')}"`,
+        c.status, c.sev,
+        `"${(c.note||'').replace(/"/g,'""')}"`
+    ]);
+    const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href:url, download:'validation-results.csv' });
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+async function exportPDF() {
+    if (!S.results.length) { alert('Run validation first.'); return; }
+    showLoading('Generating PDF report…', 'Building report pages');
+    await tick();
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+        const W = 297, H = 210;
+        const proj = document.getElementById('projectInput').value || 'Drawing Validation';
+        const dateStr = new Date().toLocaleDateString('en-GB');
+
+        doc.setFillColor(30,58,95);
+        doc.rect(0,0,W,35,'F');
+        doc.setTextColor(255,255,255);
+        doc.setFont('helvetica','bold'); doc.setFontSize(20);
+        doc.text('Drawing Validation Report', 14, 14);
+        doc.setFont('helvetica','normal'); doc.setFontSize(10);
+        doc.text(`Project: ${proj}`, 14, 22);
+        doc.text(`Drawing: ${S.drawing?.name||''}`, 14, 28);
+        doc.text(`Date: ${dateStr}`, 14, 34);
+
+        const total = S.results.length;
+        const pass  = S.results.filter(r=>r.status==='PASS').length;
+        const fail  = S.results.filter(r=>r.status==='FAIL').length;
+        const warn  = S.results.filter(r=>r.status==='WARNING').length;
+
+        const boxes = [
+            { label:'Total Rooms', val:total, r:33, g:150, b:243 },
+            { label:'Passed',      val:pass,  r:67, g:160, b:71  },
+            { label:'Failed',      val:fail,  r:229,g:57,  b:53  },
+            { label:'Warnings',    val:warn,  r:255,g:143, b:0   },
+        ];
+        const bw=52, bh=22, by=42;
+        boxes.forEach((b,i) => {
+            const bx = 14 + i*(bw+8);
+            doc.setFillColor(b.r,b.g,b.b);
+            doc.roundedRect(bx,by,bw,bh,2,2,'F');
+            doc.setTextColor(255,255,255);
+            doc.setFont('helvetica','bold'); doc.setFontSize(18);
+            doc.text(String(b.val), bx+bw/2, by+13, {align:'center'});
+            doc.setFontSize(8); doc.setFont('helvetica','normal');
+            doc.text(b.label, bx+bw/2, by+19, {align:'center'});
+        });
+
+        doc.setTextColor(0,0,0);
+        doc.setFontSize(9); doc.setFont('helvetica','normal');
+        doc.text(`Reference Library: ${S.library.length} document(s) — ${S.library.map(d=>d.name).join(', ').substring(0,100)}`, 14, 72);
+        doc.text(`Room Schedule: ${S.roomSchedule.length} rooms defined`, 14, 78);
+
+        let y = 88;
+        doc.setFont('helvetica','bold'); doc.setFontSize(11);
+        doc.text('ROOM-BY-ROOM RESULTS', 14, y); y += 6;
+
+        const cols = [
+            {label:'Room No.', x:14}, {label:'Room Name', x:44}, {label:'Level', x:106},
+            {label:'Checks', x:130}, {label:'Pass', x:150}, {label:'Fail', x:166},
+            {label:'Warn', x:182}, {label:'Status', x:198}, {label:'Comment', x:224},
+        ];
+        doc.setFillColor(240,243,246);
+        doc.rect(14, y, W-28, 7, 'F');
+        doc.setFontSize(8); doc.setTextColor(80,80,80);
+        cols.forEach(c => doc.text(c.label, c.x+1, y+5));
+        y += 7;
+
+        doc.setFont('helvetica','normal');
+        for (const room of S.results) {
+            if (y > H-18) { doc.addPage(); y=14; }
+            const pC = room.checks.filter(c=>c.status==='PASS').length;
+            const fC = room.checks.filter(c=>c.status==='FAIL').length;
+            const wC = room.checks.filter(c=>c.status==='WARNING').length;
+            if (room.status==='FAIL')    doc.setFillColor(255,235,238);
+            else if (room.status==='WARNING') doc.setFillColor(255,248,225);
+            else doc.setFillColor(232,245,233);
+            doc.rect(14, y, W-28, 6, 'F');
+            doc.setTextColor(0,0,0); doc.setFontSize(8);
+            doc.text(room.roomNo.substring(0,12), 15, y+4);
+            doc.text(room.roomName.substring(0,30), 45, y+4);
+            doc.text((room.level||'').substring(0,8), 107, y+4);
+            doc.text(String(room.checks.length), 131, y+4);
+            doc.setTextColor(67,160,71);  doc.text(String(pC), 151, y+4);
+            doc.setTextColor(229,57,53);  doc.text(String(fC), 167, y+4);
+            doc.setTextColor(255,143,0);  doc.text(String(wC), 183, y+4);
+            const sc = room.status==='PASS'?[46,125,50]:room.status==='FAIL'?[198,40,40]:[230,81,0];
+            doc.setTextColor(...sc); doc.setFont('helvetica','bold');
+            doc.text(room.status, 199, y+4);
+            doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+            doc.text((S.comments[room.roomNo]||'').substring(0,38), 225, y+4);
+            y += 6;
+        }
+
+        doc.addPage();
+        doc.setFillColor(30,58,95);
+        doc.rect(0,0,W,14,'F');
+        doc.setTextColor(255,255,255);
+        doc.setFont('helvetica','bold'); doc.setFontSize(13);
+        doc.text('DETAILED ISSUES LOG', 14, 9);
+
+        const issues = S.flatChecks
+            .filter(c => c.status!=='PASS' && c.status!=='INFO')
+            .sort((a,b) => ({CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3}[a.sev]||3) - ({CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3}[b.sev]||3));
+
+        y = 20;
+        doc.setFillColor(240,243,246);
+        doc.rect(14, y, W-28, 7, 'F');
+        doc.setFontSize(8); doc.setTextColor(80,80,80); doc.setFont('helvetica','bold');
+        ['Room','Category','Description','Required','Severity','Status'].forEach((t,i) => {
+            doc.text(t, [15,45,81,191,241,266][i], y+5);
+        });
+        y += 7;
+        doc.setFont('helvetica','normal');
+        for (const issue of issues) {
+            if (y > H-12) { doc.addPage(); y=14; }
+            if (issue.status==='FAIL') doc.setFillColor(255,235,238);
+            else doc.setFillColor(255,248,225);
+            doc.rect(14, y, W-28, 6, 'F');
+            doc.setTextColor(0,0,0); doc.setFontSize(7.5);
+            doc.text(issue.roomNo.substring(0,12), 15, y+4);
+            doc.text(issue.cat.substring(0,16), 45, y+4);
+            doc.text(issue.desc.substring(0,52), 81, y+4);
+            doc.text((issue.req||'').substring(0,20), 191, y+4);
+            const sc2 = {CRITICAL:[198,40,40],HIGH:[230,81,0],MEDIUM:[245,124,0],LOW:[158,158,158]}[issue.sev]||[0,0,0];
+            doc.setTextColor(...sc2); doc.setFont('helvetica','bold');
+            doc.text(issue.sev, 241, y+4);
+            const ss = issue.status==='FAIL'?[198,40,40]:[230,81,0];
+            doc.setTextColor(...ss);
+            doc.text(issue.status, 266, y+4);
+            doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+            y += 6;
+        }
+
+        const pages = doc.getNumberOfPages();
+        for (let i=1; i<=pages; i++) {
+            doc.setPage(i);
+            doc.setFontSize(7); doc.setTextColor(180,180,180);
+            doc.text(`Drawing Validation Checker · ${proj} · Page ${i} of ${pages} · Generated ${dateStr}`, 14, H-4);
+        }
+
+        doc.save(`Validation-${proj.replace(/[^a-zA-Z0-9]/g,'-')}-${dateStr.replace(/\//g,'-')}.pdf`);
+        stepDone(5);
+    } catch(e) {
+        console.error(e);
+        alert('PDF export error: ' + e.message);
+    }
+    hideLoading();
+}
+
+function showLoading(title, sub) {
+    document.getElementById('loadingTitle').textContent = title;
+    document.getElementById('loadingSub').textContent   = sub;
+    document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
+function tick() { return new Promise(r => setTimeout(r, 60)); }
+
+</script>
+</body>
+</html>
